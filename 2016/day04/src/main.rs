@@ -1,6 +1,6 @@
 use regex::Regex;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests {
@@ -24,23 +24,21 @@ mod tests {
         assert_eq!(room1.input_checksum, "abxyz");
         assert!(room1.is_real_room());
 
-        // assert!(is_real_room("a-b-c-d-e-f-g-h-987[abcde]"));
-        let input2 = String::from("a-b-c-d-e-f-g-h-987[abcde]");
+        let input2 = "a-b-c-d-e-f-g-h-987[abcde]";
         let room2 = Room::from(&input2);
         assert!(room2.is_real_room());
-        // assert!(is_real_room("not-a-real-room-404[oarel]"));
-        let input3 = String::from("not-a-real-room-404[oarel]");
+
+        let input3 = "not-a-real-room-404[oarel]";
         let room3 = Room::from(&input3);
         assert!(room3.is_real_room());
-        // assert!(!is_real_room("totally-real-room-200[decoy]"));
-        let input4 = String::from("totally-real-room-200[decoy]");
+
+        let input4 = "totally-real-room-200[decoy]";
         let room4 = Room::from(&input4);
         assert!(!room4.is_real_room());
     }
 }
 
 struct Room {
-    // TODO: I think that I may be misusing str vs. String.
     encrypted_name: String,
     name: String,
     sector_id: u32,
@@ -49,20 +47,19 @@ struct Room {
 }
 
 impl Room {
-    fn from(input: &String) -> Room {
-
+    fn from(input: &str) -> Room {
         let re = Regex::new(r"^([a-z][\-[a-z]*]*)-([0-9]*)\[([a-z]*)\]$").unwrap();
         let cap = re.captures(input).unwrap();
 
         // let mut letters: HashMap::<char, i32> = HashMap::new();
-        let mut letters: BTreeMap::<char, i32> = BTreeMap::new();
+        let mut letters: BTreeMap<char, i32> = BTreeMap::new();
         for token in cap[1].split('-') {
             for ch in token.chars() {
                 let foo = letters.entry(ch).or_insert(0);
                 *foo += 1;
             }
-        }       
-        // Now, need to find the five largest, breaking ties alphabetically. 
+        }
+        // Now, need to find the five largest, breaking ties alphabetically.
         let mut cs = String::new();
         for _ in 0..5 {
             let mut max_val = 0;
@@ -92,18 +89,20 @@ impl Room {
             if ch.is_ascii_lowercase() {
                 // lowercase ascii runs from 97 ('a') to 122 ('z').
                 // Output letter = (((input - 97) + shift) % 26) + 97
-                let output_ord = (((ch as u32 - 97) + sector_id ) % 26) + 97;
+                let output_ord = (((ch as u32 - 97) + sector_id) % 26) + 97;
+                // Is this as ugly as it seems?  Will these conversions ever fail?
                 name.push(output_ord as u8 as char);
             }
-        } 
+        }
 
-        let room = Room{encrypted_name: encrypted_name,
-                        name: name,
-                        sector_id: sector_id,
-                        input_checksum: input_cs,
-                        calculated_checksum: cs}; 
+        let room = Room {
+            encrypted_name: encrypted_name,
+            name: name,
+            sector_id: sector_id,
+            input_checksum: input_cs,
+            calculated_checksum: cs,
+        };
         room
-
     }
 
     // NB: &self is syntactic sugar for 'self: &Room'
@@ -113,7 +112,7 @@ impl Room {
 }
 
 // What is the sum of the sector IDs of the real rooms?
-fn part1(input: &String) -> u32 {
+fn part1(input: &str) -> u32 {
     let mut sum = 0;
     for line in input.split('\n') {
         let room = Room::from(&String::from(line));
@@ -124,11 +123,11 @@ fn part1(input: &String) -> u32 {
     sum
 }
 
-fn part2(input: &String) -> u32{
+fn part2(input: &str) -> u32 {
     let mut id = 0;
     for line in input.split('\n') {
-        let room = Room::from(&String::from(line));
-        if room.is_real_room(){
+        let room = Room::from(line);
+        if room.is_real_room() {
             if room.name.contains("object") {
                 id = room.sector_id;
                 break;
@@ -144,5 +143,4 @@ fn main() {
     println!("Part 1: {}", answer1);
     let answer2 = part2(&input);
     println!("Part 2: {}", answer2);
-
 }
