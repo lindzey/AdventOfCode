@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::collections::HashSet;
 
 #[cfg(test)]
 mod test {
@@ -30,7 +31,46 @@ mod test {
 }
 
 fn supports_ssl(input: &str) -> bool {
-    unimplemented!();
+    let re1 = Regex::new(r"[a-z]+\[([a-z]+)\]").unwrap();
+    let mut inner: HashSet<String> = HashSet::new();
+    for capture in re1.captures_iter(input) {
+        inner.insert(String::from(&capture[1]));
+    }
+
+    let mut outer: HashSet<String> = HashSet::new();
+    let re2 = Regex::new(r"([a-z]+)\[").unwrap();
+    for capture in re2.captures_iter(input) {
+        outer.insert(String::from(&capture[1]));
+    }
+    let re3 = Regex::new(r"\]([a-z]+)").unwrap();
+    for capture in re3.captures_iter(input) {
+        outer.insert(String::from(&capture[1]));
+    }
+
+    for token in &outer {
+        let characters: Vec<char> = token.chars().collect();
+        if characters.len() < 3 {
+            continue;
+        }
+        for idx in 2..characters.len() {
+            if characters[idx-2] == characters[idx-1] {
+                continue;
+            }
+            if characters[idx-2] == characters[idx] {
+                let mut bab = String::new();
+                bab.push(characters[idx-1]);
+                bab.push(characters[idx-2]);
+                bab.push(characters[idx-1]);
+                for inner_token in &inner {
+                    if inner_token.contains(&bab) {
+                        return true;
+                    } 
+                }
+
+            }
+        }
+    }
+    false
 }
 
 fn supports_tls(input: &str) -> bool {
@@ -102,9 +142,6 @@ fn part2(input: &str) -> i32 {
 }
 
 fn main() {
-    println!("'a' as i32: {}", 'a' as i32);
-    let foo = '8';
-    println!("to_digit: {}, as: {}", foo.to_digit(10).unwrap(), foo as i32);
     let input = std::fs::read_to_string("input.txt").unwrap();
     let answer1 = part1(&input);
     println!("Part 1: {}", answer1);
