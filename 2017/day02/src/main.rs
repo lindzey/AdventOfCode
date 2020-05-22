@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use itertools::Itertools;
 
 #[cfg(test)]
 mod test {
@@ -13,14 +14,9 @@ mod test {
 
     #[test]
     fn test_part2() {
-        let input = std::fs::read_to_string("test_input.txt").unwrap();
+        let input = std::fs::read_to_string("test_input_part2.txt").unwrap();
         assert_eq!(9, part2(&input));        
     }
-}
-fn main() {
-    let input = std::fs::read_to_string("input.txt").unwrap();
-    println!("Part1: {}", part1(&input));
-    println!("Part2: {}", part2(&input));
 }
 
 fn part2(input: &str) -> u32 {
@@ -36,11 +32,16 @@ fn checksum_divides(line: &str) -> u32 {
         })
         .collect();
     cells.sort();
-    for i in 0..(cells.len()-1) {
-        for j in i..cells.len() {
-            if cells[j] % cells[i] == 0 {
-                return u32::try_from(cells[j] - cells[i]).unwrap();
-            }
+    // for i in 0..(cells.len()-1) {
+    //     for j in (i+1)..cells.len() {
+    //         if cells[j] % cells[i] == 0 {
+    //             return u32::try_from(cells[j] / cells[i]).unwrap();
+    //         }
+    //     }
+    // }
+    for combo in cells.iter().combinations(2) {
+        if combo[1] % combo[0] == 0 {
+            return u32::try_from(combo[1] / combo[0]).unwrap();
         }
     }
     panic!("badbad");
@@ -69,4 +70,10 @@ fn checksum_line(line: &str) -> u32 {
         .collect();
     let cs = cells.iter().max().unwrap() - cells.iter().min().unwrap();
     u32::try_from(cs).unwrap()
+}
+
+fn main() {
+    let input = std::fs::read_to_string("input1.txt").unwrap();
+    println!("Part1: {}", part1(&input));
+    println!("Part2: {}", part2(&input));
 }
