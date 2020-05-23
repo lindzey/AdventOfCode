@@ -1,5 +1,4 @@
-use math;
-use ndarray::Array2;
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod test {
@@ -18,13 +17,6 @@ mod test {
     
     }
 
-    // #[test]
-    // fn test_get_coord2() {
-    //     let (x, y) = get_coord2(10);
-    //     assert_eq!(2, x);
-    //     assert_eq!(-1, y);
-    // }
-
     #[test]
     fn test_part1() {
         assert_eq!(0, part1(1));
@@ -37,10 +29,40 @@ mod test {
     }
 
     #[test]
-    fn test_part2() {
+    fn test_get_neighbors() {
+        let origin = Point2{x: 0, y:0};
+        let origin_neighbors = get_neighbors(&origin);
+        assert_eq!(8, origin_neighbors.len());
+        let pt1 = Point2{x: 1, y:1};
+        assert!(origin_neighbors.contains(&pt1));
+        let pt2 = Point2{x: 0, y:0};
+        assert!(!origin_neighbors.contains(&pt2));
+    }
 
+    #[test]
+    fn test_part2() {
+        // Known answer from LEL's previous solution:
         assert_eq!(279138, part2(277678))
     }
+}
+
+#[derive(Eq, PartialEq, Hash, Debug)]
+struct Point2 {
+    x: i32,
+    y: i32,
+}
+
+fn get_neighbors(point: &Point2) -> Vec<Point2> {
+    let mut neighbors = Vec::new();
+    let (xx, yy) = (point.x, point.y);
+    for dx in -1..2 {
+        for dy in -1..2 {
+            if dx != 0 || dy != 0 {
+                neighbors.push(Point2{x: xx+dx, y: yy+dy});
+            }
+        }
+    }
+    neighbors
 }
 
 // Return zero-indexed ring for input
@@ -61,7 +83,7 @@ fn get_ring(val: i32) -> i32 {
     ring
 }
 
-fn get_coords(val: i32, ring: i32) -> (i32, i32) {
+fn get_coords(val: i32, ring: i32) -> Point2 {
     // (n, 0) Center of right side will be: (2n-1)^2 + n
     let center_right = (2*ring-1).pow(2) + ring;
     // (n, n) Top-right corner will be: (2n-1)^2 + 2n
@@ -71,99 +93,71 @@ fn get_coords(val: i32, ring: i32) -> (i32, i32) {
     let center_top = (2*ring-1).pow(2) + 3*ring;
     let top_left = (2*ring-1).pow(2) + 4*ring;
 
-
     let center_left = (2*ring-1).pow(2) + 5*ring;
     let bottom_left = (2*ring-1).pow(2) + 6*ring;
     let center_bottom = (2*ring-1).pow(2) + 7*ring;
     
     // (n, -n) Bottom-right corner will be (2n+1) ^2
-    let bottom_right = (2*ring+1).pow(2);
+    // let bottom_right = (2*ring+1).pow(2);
     
-    let mut xx = 0;
-    let mut yy = 0;
+    let xx: i32; 
+    let yy: i32;
     if val < top_right {
         xx = ring;
-        yy = center_right - val;
+        yy = val  - center_right;
     } else if val < top_left {
         xx = center_top - val;
         yy = ring;
     } else if val < bottom_left {
-        xx = ring;
+        xx = -1 * ring;
         yy = center_left - val;
     } else {
-        xx = center_bottom - val;
+        xx = val - center_bottom;
         yy = -1 * ring;
     }
-    (xx, yy)
-}
-
-
-// fn get_coord2(num: i32) -> (i32, i32) {
-//     // eg num                            15
-//     let ring = get_ring(num);              // 2
-//     let min = ring_start(ring);            // 10
-//     let pos = num - min;                   // 5
-//     let side_len = 2 * ring;               // 4
-//     let side_idx = pos/side_len;
-//     // let side_idx = math::round::floor(pos / side_len, 0);  // 1
-//     let side_center = (side_len - 1) / 2;
-//     // let side_center = math::round::floor((side_len - 1) / 2, 0); // 1
-//     let side_offset = pos % side_len;      // 1
-
-//     let mut x: i32;
-//     let mut y: i32;
-//     if side_idx == 0 { // right
-//         x = ring;
-//         y = side_offset - side_center;
-//     } else if side_idx == 1 { // top
-//         x = side_center - side_offset;
-//         y = ring;
-//     } else if side_idx == 2 { // right
-//         x = -ring;
-//         y = side_center - side_offset;
-//     } else { // bottom
-//         x = side_offset - side_center;
-//         y = -ring;
-//     }
-
-//     (x, y)
-// }
-
-fn ring_start(ring_num: i32) -> i32 {
-    if ring_num == 0 {
-        return 1
-    }
-    (2 * n - 1).pow(2) + 1 
+    Point2{x: xx, y:yy}
 }
 
 fn main() {
-    // println!(std::fs::read_to_string("input"));
-    println!("Part 1: {}", part1(312051));
+    let db_input = 312051;
+    println!("Part 1: {}", part1(db_input));
+    println!("Part 2: {}", part2(db_input));
 }
 
-fn part1(num: i32) -> u32 {
+fn part1(num: i32) -> i32 {
     let ring = get_ring(num);
-    let (xx, yy) = get_coords(num, ring);
-    xx.abs() as u32 + yy.abs() as u32
+    let pt = get_coords(num, ring);
+    pt.x.abs() + pt.y.abs()
 }
 
-fn part2(num: i32) -> u32 {
-    unimplemented!();
-}
+fn part2(num: i32) -> i32 {
+    /*
+    Reuse our solution to part 1 to determine the coordinates of cells in order.
+    Keep a HashSet of already-visited coordinates and their cumulative sums,
+    and use that to look up values for already-visited neighbors of all new cells.
+    */
+    let mut cells = HashMap::new();
+    cells.insert(Point2{x: 0, y: 0}, 1);
+    // Sum of all neighbors in previous cell.
+    let mut neighbor_sum = 1;
+    // We are about to visit the n-th cell
+    let mut cell_idx = 2;
 
-struct Grid {
-    data: Array2<i32>,
-    width: usize,
-    height: usize,
-}
-
-impl Grid {
-    fn new(width: usize, height: usize) -> Grid {
-        let data = Array2::zeros((width, height));
-        Grid { data, width, height }
+    while neighbor_sum < num {
+        let ring = get_ring(cell_idx);
+        let coords = get_coords(cell_idx, ring);
+        let neighbors = get_neighbors(&coords);
+        let mut sum = 0;  // Sum of all already-visited neighbors
+        for neighbor in neighbors.iter() {
+            let nn = cells.get(&neighbor);
+            if let Some(val) = nn {
+                sum += val;
+            } 
+        }
+        assert!(sum >= neighbor_sum);
+        neighbor_sum = sum;
+        cell_idx += 1;
+        cells.insert(coords, sum);
     }
-
-    fn set(x: i32, y: i32, val: i32) {
-        data.set(x + (width / 2), y + (height / 2), val);
-    }
+    neighbor_sum
 }
