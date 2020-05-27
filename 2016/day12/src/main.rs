@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 
 #[cfg(test)]
 mod test {
@@ -8,36 +9,58 @@ mod test {
         use pretty_assertions::assert_eq;
 
         let input = std::fs::read_to_string("test_input.txt").unwrap();
-        let instructions = load_instructions(&input);
+        let instructions = load_program(&input).unwrap();
         let mut computer = Computer::new();
-        computer.run_instructions(&instructions);
-        assert_eq!(computer.registers[&'a'], 42);
+        computer.run_program(&instructions);
+        assert_eq!(computer.get_reg(&Register::A), 42);
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Register {
+    A,
+    B,
+    C,
+    D,
+}
+
+#[derive(Default)]
 struct Computer {
-    registers: HashMap<char, i32>,
+    registers: HashMap<Register, i32>,
 }
 
 impl Computer {
     fn new() -> Computer {
         let mut registers = HashMap::new();
-        for ch in &['a', 'b', 'c', 'd'] {
-            registers.insert(*ch, 0);
+        use Register::*;
+        // TODO: Really, I wanted to automatically insert every register into 
+        // the computer so key-not-found errors would be impossible.
+        // However, it doesn't seem like there's a way (in the standard
+        // library) to iterate over static enums.
+        for reg in &[A, B, C, D] {
+            registers.insert(*reg, 0);
         }
         Computer {
             registers
         }
     }
 
-    fn run_instructions(&mut self, instructions: &[Instruction]) {
+    fn get_reg(&self, reg: &Register) -> i32 {
+        *self.registers.get(reg).unwrap()
+    }
+
+    fn set_reg(&mut self, reg: &Register, val: i32) {
+        *self.registers.get_mut(reg).unwrap() = val;
+    }
+
+    fn run_program(&mut self, instructions: &Program) {
         let mut idx = 0;
         while idx < instructions.len() {
             match &instructions[idx] {
-                Instruction::Cpy(val, reg) => {
+                Instruction::Cpy(val, dest_reg) => {
                     match val {
-                        Value::Register(rr) => *self.registers.get_mut(reg).unwrap() = *self.registers.get(rr).unwrap(),
-                        Value::Number(ii) => *self.registers.get_mut(reg).unwrap() = *ii,
+                        Operand::Register(src_reg) => self.set_reg(dest_reg, self.get_reg(src_reg)),
+                        Operand::Number(ii) => self.set_reg(dest_reg, *ii),
                     };
                     idx += 1;
                 },
@@ -51,14 +74,14 @@ impl Computer {
                 },
                 Instruction::Jnz(val, jmp) => {
                     match val {
-                        Value::Register(reg) => {
+                        Operand::Register(reg) => {
                             if 0 != *self.registers.get_mut(reg).unwrap() {
                                 idx = (idx as i32 + jmp) as usize;
                             } else {
                                 idx += 1;
                             }
                         },
-                        Value::Number(ii) => {
+                        Operand::Number(ii) => {
                             if 0 != *ii {
                                 idx = (idx as i32 + jmp) as usize;
                             } else {
@@ -73,24 +96,59 @@ impl Computer {
 }
 
 enum Instruction {
-  Cpy(Value, char),
-  Inc(char),
-  Dec(char),
-  Jnz(Value, i32),
+  Cpy(Operand, Register),
+  Inc(Register),
+  Dec(Register),
+  Jnz(Operand, i32),
 }
 
-enum Value{
-    Register(char),
+enum Operand {
+    Register(Register),
     Number(i32),
 }
 
-impl Value {
-    fn from(input: &str) -> Value {
+#[derive(Debug)]
+struct AssemBunnyParseError {
+    message: String,
+}
+impl AssemBunnyParseError {
+    fn new(msg: &str) -> AssemBunnyParseError {
+        AssemBunnyParseError{message: msg.to_string()} 
+    }
+}
+impl std::fmt::Display for AssemBunnyParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl Error for AssemBunnyParseError {
+    fn description(&self) -> &str {
+        &self.message
+    }
+}
+
+impl Register {
+    fn from(input: &str) -> Result<Register, AssemBunnyParseError> {
+        match input {
+            "a" => Ok(Register::A),
+            "b" => Ok(Register::B),
+            "c" => Ok(Register::C),
+            "d" => Ok(Register::D),
+            _ => Err(AssemBunnyParseError::new(&format!("Unable to parse {} into a Register", input)))
+        }
+    }
+}
+
+impl Operand {
+    fn from(input: &str) -> Result<Operand, AssemBunnyParseError> {
         let parsed = input.parse::<i32>();
         if let Ok(num) = parsed {
-            Value::Number(num)
+            Ok(Operand::Number(num))
         } else {
-            Value::Register(input.chars().next().unwrap())
+            match Register::from(input) {
+                Ok(reg) => Ok(Operand::Register(reg)),
+                Err(err) => Err(err),
+            }
         } 
     }
 }
@@ -102,20 +160,21 @@ impl Instruction {
     dec x decreases the value of register x by one.
     jnz x y jumps to an instruction y away (positive means forward; negative means backward), but only if x is not zero.
     */
-    fn from(input: &str) -> Instruction {
+    fn from(input: &str) -> Result<Instruction, AssemBunnyParseError> {
         let tokens: Vec<&str> = input.split_whitespace().collect();
         match tokens[0] {
             "cpy" => {
-                Instruction::Cpy(Value::from(tokens[1]), tokens[2].chars().next().unwrap())
+                Ok(Instruction::Cpy(Operand::from(tokens[1])?, Register::from(tokens[2])?))
             },
             "inc" => {
-                Instruction::Inc(tokens[1].chars().next().unwrap())
+                Ok(Instruction::Inc(Register::from(tokens[1])?))
             },
             "dec" => {
-                Instruction::Dec(tokens[1].chars().next().unwrap())
+                Ok(Instruction::Dec(Register::from(tokens[1])?))
             },
             "jnz" => {
-                Instruction::Jnz(Value::from(tokens[1]), tokens[2].parse::<i32>().unwrap())
+                // TODO: Figure out how to Box my error s.t. I can also pass up the i32 parse error...
+                Ok(Instruction::Jnz(Operand::from(tokens[1])?, tokens[2].parse::<i32>().unwrap()))
             },
             _ => panic!("Unrecognized instruction: {}", input),
         }
@@ -123,27 +182,28 @@ impl Instruction {
 }
 
 // TODO: It seems like there should be a more functional way to do this?
-fn load_instructions(input: &str) -> Vec<Instruction> {
+type Program = Vec<Instruction>;
+fn load_program(input: &str) -> Result<Program, AssemBunnyParseError> {
     let mut instructions = Vec::new();
     for line in input.lines() {
-        instructions.push(Instruction::from(line));
+        instructions.push(Instruction::from(line)?);
     }
-    instructions
+    Ok(instructions)
 }
 
 fn part1(input: &str) -> i32 {
-    let instructions = load_instructions(&input);
+    let instructions = load_program(&input).unwrap();
     let mut computer = Computer::new();
-    computer.run_instructions(&instructions);
-    computer.registers[&'a']
+    computer.run_program(&instructions);
+    computer.get_reg(&Register::A)
 }
 
 fn part2(input: &str) -> i32 {
-    let instructions = load_instructions(&input);
+    let instructions = load_program(&input).unwrap();
     let mut computer = Computer::new();
-    *computer.registers.get_mut(&'c').unwrap() = 1;
-    computer.run_instructions(&instructions);
-    computer.registers[&'a']
+    *computer.registers.get_mut(&Register::C).unwrap() = 1;
+    computer.run_program(&instructions);
+    computer.get_reg(&Register::A)
 }
 
 fn main() {

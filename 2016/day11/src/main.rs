@@ -231,6 +231,8 @@ struct ItemGroup {
 
 #[derive(PartialEq, PartialOrd, Ord, Eq, Hash, Debug, Clone, Copy)]
 enum Power {
+    Dilithium,
+    Elerium,
     Hydrogen,
     Lithium,
     Thulium,
@@ -317,25 +319,8 @@ impl ItemGroup{
 
 impl Facility{
     fn apply_transition(&self, transition: &Transition) -> Facility {
-        // QUESTION: Why did the top-level clone not work?
         let mut new_floors = self.floors.clone();
 
-        /*
-        let mut new_floors = BTreeMap::new();
-        for (k, v) in self.floors.iter() {
-            // Why can't i dereference this key? i32's are Copy,
-            // so I should get an owned int, rather than a reference
-            // into the BTreeMap's index.
-            new_floors.insert(k.clone(), v.clone());
-        }
-        */
-
-        /* 
-        let keys: Vec<_> = self.floors.keys().cloned().collect();
-        for &key in keys.iter() {
-            new_floors.insert(key, self.floors.get(&key).unwrap().clone());
-        }
-        */
         for &rtg in transition.items.rtgs.iter() {
             let dest_floor = new_floors.get_mut(&transition.dest_floor).unwrap();
             dest_floor.rtgs.insert(rtg);
@@ -505,11 +490,20 @@ impl Facility {
         for (floor, items) in self.floors.iter() {
             dist += (4 - floor) * (items.rtgs.len() + items.chips.len()) as i32;
         }
-        dist as usize
+        if dist >= 1 {
+            (dist - 1) as usize
+        } else {
+            0
+        }
     }
 
     fn at_goal(&self) -> bool {
-        0 == self.dist_to_goal()
+        for floor in 1..4 {
+            if !self.floors[&floor].rtgs.is_empty() || !self.floors[&floor].chips.is_empty() {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -517,6 +511,8 @@ impl Facility {
 fn get_power(input: &str) -> Power {
     let power: Power;
     match input {
+        "dilithium" => power = Power::Dilithium,
+        "elerium" => power = Power::Elerium,
         "hydrogen" => power = Power::Hydrogen,
         "lithium" => power = Power::Lithium,
         "plutonium" => power = Power::Plutonium,
@@ -546,7 +542,6 @@ fn pop_first(set: &mut BTreeSet<SearchState>) -> SearchState {
 }
 
 fn run_astar(facility: Facility) -> SearchState {
-    // Oh, drat. I can't use a BTreeMap because the keys aren't guaranteed to be 
     let mut search_queue = BTreeSet::<SearchState>::new();
     let initial_dist = facility.dist_to_goal();
     let initial_state = SearchState{
@@ -556,7 +551,7 @@ fn run_astar(facility: Facility) -> SearchState {
     };
     search_queue.insert(initial_state);
 
-    let mut visited_states = BTreeSet::<Facility>::new();
+    let mut visited_states = BTreeMap::<Facility, usize>::new();
 
     let mut count = 0;
     loop {
@@ -564,32 +559,44 @@ fn run_astar(facility: Facility) -> SearchState {
         println!();
         println!("{}-th iteration of A*", count);
         let search_state = pop_first(&mut search_queue);
-        visited_states.insert(search_state.state.clone());
+        //Need to update this if it's a new state ...
+        let state = visited_states.get(&search_state.state);
+        if let Some(length) = state {
+            if length <= &search_state.history.len() {
+                continue;
+            } else {
+                // TODO: seems like there should be an easier way to update this in-place...
+                visited_states.remove(&search_state.state);
+                visited_states.insert(search_state.state.clone(), search_state.history.len());
+            }
+        } else {
+            visited_states.insert(search_state.state.clone(), search_state.history.len());
+        }
         //println!("Next search state: {:?}", search_state);
         println!("Queue has {} un-examined states", search_queue.len());
         if search_state.state.at_goal() {
             return search_state;
         }
 
-        // TODO: 
         let transitions = search_state.state.list_valid_transitions();
         println!("Current dist: {} (len = {}), and there are {} possible transitions", 
             search_state.astar_dist, search_state.history.len(), transitions.len());
         for transition in transitions {
-            /*
-            Need to add resulting state to the list of states to search.
-            - get new state from old one (apply transition)
-            - calcuate new astar dist (len of history + )
-            */
             //println!("Applying transition: {:?}", transition);
             let mut history = search_state.history.to_owned();
             let new_state = search_state.state.apply_transition(&transition);
-            if visited_states.contains(&new_state) {
-                println!("We've already seen this state - skipping");
-                continue;
+            if visited_states.contains_key(&new_state) {
+                if visited_states[&new_state] <= (1+history.len()) {
+                    println!("We've already seen this state - skipping");
+                    continue;
+                } else {
+                    println!("New state: {:?}", new_state);
+                    println!("Old length: {}. new length: {}", visited_states[&new_state], history.len()+1);
+                    println!("New history: {:?}", history);
+                }
             }
             history.push(transition);
-            let astar_dist = 2 * history.len() + new_state.dist_to_goal();
+            let astar_dist = history.len() + new_state.dist_to_goal();
             println!("Applying transition with dist {}", astar_dist);
             search_queue.insert(SearchState{
                 astar_dist, 
@@ -622,4 +629,6 @@ fn main() {
     let input = std::fs::read_to_string("input.txt").unwrap();
     let answer1 = part1(&input);
     println!("Part1: {}", answer1);
+    // let answer2 = part1(&input);
+    // println!("Part2: {}", answer2);
 }
